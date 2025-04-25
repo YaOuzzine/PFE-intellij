@@ -1,0 +1,31 @@
+server:
+  port: 8080
+
+spring:
+  main:
+    web-application-type: reactive
+  cloud:
+    vault:
+      enabled: true
+      token:   
+
+
+
+      host: localhost
+      port: 8200
+      scheme: http
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+  cloud:
+    vault:
+      enabled: true
