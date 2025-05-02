@@ -15,6 +15,7 @@ import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.scheduler.Schedulers;
@@ -97,5 +98,13 @@ public class DynamicRouteConfig {
     /** Trigger after any CRUD change to refresh gateway routes */
     public void publishRefreshEvent() {
         publisher.publishEvent(new RefreshRoutesEvent(this));
+    }
+
+    /**
+     * Periodically refresh routes from the database
+     */
+    @Scheduled(fixedDelay = 45000) // 45 seconds (slightly longer than the admin sync)
+    public void refreshRoutes() {
+        this.publishRefreshEvent();
     }
 }

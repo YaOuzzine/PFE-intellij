@@ -5,7 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "gateway_routes")
+@Table(name = "gateway_routes", schema = "gateway")
 public class GatewayRoute {
 
     @Id

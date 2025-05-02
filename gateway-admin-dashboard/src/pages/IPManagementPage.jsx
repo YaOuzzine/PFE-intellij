@@ -87,12 +87,44 @@ const IPManagementPage = () => {
   //-----------------------------------
   // CRUD actions
   //-----------------------------------
+  // In IPManagementPage.jsx
   const handleAdd = async () => {
-    if (!addForm.ip || !addForm.routeId) { alert('Both IP and Route ID are required'); return; }
+    if (!addForm.ip || !addForm.routeId) {
+      alert('Both IP and Route ID are required');
+      return;
+    }
+
+    setLoading(true);
     try {
-      await addIpAddress({ ip: addForm.ip, gatewayRoute: { id: Number(addForm.routeId) } });
-      setOpenAdd(false); setAddForm({ ip: '', routeId: '' }); await load();
-    } catch (e) { console.error(e); alert('Failed to add IP'); }
+      console.log('Submitting IP data:', {
+        ip: addForm.ip,
+        gatewayRoute: { id: Number(addForm.routeId) }
+      });
+
+      const response = await addIpAddress({
+        ip: addForm.ip,
+        gatewayRoute: { id: Number(addForm.routeId) }
+      });
+
+      console.log('Server response:', response);
+      setOpenAdd(false);
+      setAddForm({ ip: '', routeId: '' });
+      showNotification('IP address added successfully', 'success');
+      await load();
+    } catch (e) {
+      console.error('Error details:', e);
+      let errorMessage = 'Failed to add IP';
+
+      if (e.response && e.response.data) {
+        errorMessage = typeof e.response.data === 'string'
+            ? e.response.data
+            : JSON.stringify(e.response.data);
+      }
+
+      showNotification(errorMessage, 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleUpdate = async () => {

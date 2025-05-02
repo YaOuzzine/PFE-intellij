@@ -19,7 +19,7 @@ public class JwtDecoderConfig {
     public ReactiveJwtDecoder jwtDecoder() {
         try {
             // Specify the absolute file path to the PEM file in the token module.
-            String filePath = "/Users/maryamajjoul/Desktop/InternshipPCA/Last_Version/token/src/main/resources/keys/public_key.pem";
+            String filePath = "C:\\Users\\yassi\\Documents\\PFE\\PFE-Intellij\\token\\src\\main\\resources\\Keys\\public_key.pem";
             try (FileInputStream fis = new FileInputStream(filePath)) {
                 // Read the file content as a String.
                 String pem = new String(fis.readAllBytes(), StandardCharsets.UTF_8);

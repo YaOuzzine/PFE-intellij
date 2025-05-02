@@ -13,7 +13,7 @@ import java.util.List;
  */
 @Getter
 @Entity
-@Table(name = "gateway_routes")
+@Table(name = "gateway_routes", schema = "admin")
 public class GatewayRoute {
 
     @Id

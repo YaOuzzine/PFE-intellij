@@ -8,7 +8,7 @@ import jakarta.persistence.*;
  * Represents an allowed IP associated with a gateway route.
  */
 @Entity
-@Table(name = "allowed_ips")
+@Table(name = "allowed_ips", schema = "admin")
 public class AllowedIps {
 
     @Id

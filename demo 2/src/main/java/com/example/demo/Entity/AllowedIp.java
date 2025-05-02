@@ -3,7 +3,7 @@ package com.example.demo.Entity;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "allowed_ips")
+@Table(name = "allowed_ips", schema = "gateway")
 public class AllowedIp {
 
     @Id

@@ -7,9 +7,7 @@ spring:
   cloud:
     vault:
       enabled: true
-      token:
-
-
+      token: hvs.vt47wTVAvmHTyurHgstV9ms1
       host: localhost
       port: 8200
       scheme: http
@@ -19,12 +17,3 @@ management:
     web:
       exposure:
         include: "*"
-
----
-spring:
-  config:
-    activate:
-      on-profile: test
-  cloud:
-    vault:
-      enabled: true

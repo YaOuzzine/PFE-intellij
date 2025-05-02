@@ -4,7 +4,7 @@ package com.example.gateway_admin.Entities;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "rate_limit")
+@Table(name = "rate_limit", schema = "admin")
 public class RateLimit {
 
     @Id
