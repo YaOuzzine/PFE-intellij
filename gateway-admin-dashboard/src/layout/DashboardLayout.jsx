@@ -1,15 +1,15 @@
 // src/layout/DashboardLayout.jsx
-import React, { useState } from 'react';
-import { Box, Typography, IconButton } from '@mui/material';
-import { styled } from '@mui/material/styles';
+import React, { useState, useEffect } from 'react';
+import { Box, Typography, IconButton, Tooltip } from '@mui/material';
+import { styled, keyframes } from '@mui/material/styles';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import HexagonOutlinedIcon from '@mui/icons-material/HexagonOutlined';
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
 import SpeedOutlinedIcon from '@mui/icons-material/SpeedOutlined';
-// Removed: import RouterOutlinedIcon from '@mui/icons-material/RouterOutlined';
 import ComputerOutlinedIcon from '@mui/icons-material/ComputerOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
+import { NavHighlightContext } from '../pages/DashboardPage';
 
 const Sidebar = styled(Box)(({ theme }) => ({
   width: 260,
@@ -27,7 +27,20 @@ const SidebarHeader = styled(Box)({
   marginBottom: '2rem'
 });
 
-const NavItem = styled(Box)(({ theme, active }) => ({
+// Create a pulsating animation
+const pulse = keyframes`
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 145, 77, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(255, 145, 77, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 145, 77, 0);
+  }
+`;
+
+const NavItem = styled(Box)(({ theme, active, highlight }) => ({
   display: 'flex',
   alignItems: 'center',
   padding: theme.spacing(1.5),
@@ -36,8 +49,11 @@ const NavItem = styled(Box)(({ theme, active }) => ({
   cursor: 'pointer',
   backgroundColor: active ? '#FF914D' : 'transparent',
   color: active ? '#FFFFFF' : 'black',
+  boxShadow: highlight ? 'none' : 'none',
+  animation: highlight ? `${pulse} 2s infinite` : 'none',
+  transition: 'all 0.3s ease',
   '&:hover': {
-    backgroundColor: active ? '' : '#FF914D',
+    backgroundColor: active ? '#FF914D' : 'rgba(255, 145, 77, 0.1)',
   }
 }));
 
@@ -58,28 +74,33 @@ const Content = styled(Box)({
 const DashboardLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  
+  const [highlightedNav, setHighlightedNav] = useState(null);
+
   // Updated navigation items (Gateway Routes removed)
   const navItems = [
-    { 
-      label: 'Dashboard', 
-      icon: <DashboardOutlinedIcon />, 
-      path: '/dashboard' 
+    {
+      id: 'DASHBOARD',
+      label: 'Dashboard',
+      icon: <DashboardOutlinedIcon />,
+      path: '/dashboard'
     },
-    { 
-      label: 'Rate Limits', 
-      icon: <SpeedOutlinedIcon />, 
-      path: '/rate-limits' 
+    {
+      id: 'RATE_LIMITS',
+      label: 'Rate Limits',
+      icon: <SpeedOutlinedIcon />,
+      path: '/rate-limits'
     },
-    { 
-      label: 'IP Management', 
-      icon: <ComputerOutlinedIcon />, 
-      path: '/ip-management' 
+    {
+      id: 'IP_MANAGEMENT',
+      label: 'IP Management',
+      icon: <ComputerOutlinedIcon />,
+      path: '/ip-management'
     },
-    { 
-      label: 'System Settings', 
-      icon: <SettingsOutlinedIcon />, 
-      path: '/system-settings' 
+    {
+      id: 'SYSTEM_SETTINGS',
+      label: 'System Settings',
+      icon: <SettingsOutlinedIcon />,
+      path: '/system-settings'
     }
   ];
 
@@ -87,44 +108,61 @@ const DashboardLayout = () => {
     navigate(path);
   };
 
-  return (
-    <Box display="flex">
-      <Sidebar>
-        <SidebarHeader>
-          <HexagonOutlinedIcon sx={{ fontSize: '2rem', mr: 1 }} />
-          <Box>
-            <Typography variant="h6" fontWeight="bold">
-              Dashboard
-            </Typography>
-            <Typography variant="caption" color="textSecondary">
-              
-            </Typography>
-          </Box>
-        </SidebarHeader>
+  // Context value for controlling navigation highlights
+  const contextValue = {
+    updateNavHighlight: (navId) => {
+      setHighlightedNav(navId);
+    }
+  };
 
-        {navItems.map((item) => (
-          <NavItem 
-            key={item.label} 
-            active={location.pathname === item.path}
-            onClick={() => handleNavClick(item.path)}
-          >
-            <NavIcon>
-              {item.icon}
-            </NavIcon>
-            <Typography sx={{ flexGrow: 1 }}>
-              {item.label}
-            </Typography>
-            {item.label !== 'Dashboard' && (
-              <KeyboardArrowRightIcon fontSize="small" />
-            )}
-          </NavItem>
-        ))}
-      </Sidebar>
-      
-      <Content>
-        <Outlet />
-      </Content>
-    </Box>
+  return (
+      <NavHighlightContext.Provider value={contextValue}>
+        <Box display="flex">
+          <Sidebar>
+            <SidebarHeader>
+              <HexagonOutlinedIcon sx={{ fontSize: '2rem', mr: 1 }} />
+              <Box>
+                <Typography variant="h6" fontWeight="bold">
+                  Dashboard
+                </Typography>
+                <Typography variant="caption" color="textSecondary">
+
+                </Typography>
+              </Box>
+            </SidebarHeader>
+
+            {navItems.map((item) => (
+                <Tooltip
+                    key={item.label}
+                    title={item.id === highlightedNav ? "Configuration needed" : ""}
+                    placement="right"
+                    arrow
+                    open={item.id === highlightedNav}
+                >
+                  <NavItem
+                      active={location.pathname === item.path}
+                      highlight={item.id === highlightedNav}
+                      onClick={() => handleNavClick(item.path)}
+                  >
+                    <NavIcon>
+                      {item.icon}
+                    </NavIcon>
+                    <Typography sx={{ flexGrow: 1 }}>
+                      {item.label}
+                    </Typography>
+                    {item.label !== 'Dashboard' && (
+                        <KeyboardArrowRightIcon fontSize="small" />
+                    )}
+                  </NavItem>
+                </Tooltip>
+            ))}
+          </Sidebar>
+
+          <Content>
+            <Outlet />
+          </Content>
+        </Box>
+      </NavHighlightContext.Provider>
   );
 };
 

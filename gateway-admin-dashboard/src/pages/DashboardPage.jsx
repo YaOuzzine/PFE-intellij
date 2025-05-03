@@ -1,5 +1,5 @@
 // src/pages/DashboardPage.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   Typography,
   Box,
@@ -38,6 +38,7 @@ import {
 import { fetchRoutesForIpManagement } from '../services/ipService';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { AuthContext } from '../context/AuthContext';
 
 const MetricCard = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(2),
@@ -47,11 +48,15 @@ const MetricCard = styled(Paper)(({ theme }) => ({
   boxShadow: '0px 3px 6px rgba(0, 0, 0, 0.1)'
 }));
 
+// Create a context for managing the highlight state of IP Management nav item
+export const NavHighlightContext = React.createContext();
+
 const DashboardPage = () => {
   // Navigation and location
   const navigate = useNavigate();
   const location = useLocation();
   const highlightedRouteId = location.state?.routeId;
+  const { updateNavHighlight } = useContext(NavHighlightContext) || {};
 
   // State for routes and metrics
   const [routes, setRoutes] = useState([]);
@@ -79,7 +84,8 @@ const DashboardPage = () => {
   const [notification, setNotification] = useState({
     open: false,
     message: '',
-    severity: 'success'
+    severity: 'success',
+    action: null
   });
 
   // State for route dialog
@@ -211,11 +217,12 @@ const DashboardPage = () => {
   }, [highlightedRouteId]);
 
   // Show notification
-  const showNotification = (message, severity = 'success') => {
+  const showNotification = (message, severity = 'success', action = null) => {
     setNotification({
       open: true,
       message,
-      severity
+      severity,
+      action
     });
   };
 
@@ -364,6 +371,11 @@ const DashboardPage = () => {
     }
   };
 
+  // Navigate to IP Management
+  const goToIpManagement = (routeId) => {
+    navigate('/ip-management', { state: { routeId } });
+  };
+
   // Toggle security settings
   const handleToggleIpFilter = async (route) => {
     try {
@@ -373,18 +385,29 @@ const DashboardPage = () => {
       };
 
       await updateGatewayRoute(route.id, updatedRoute);
-      showNotification(`IP filtering ${updatedRoute.withIpFilter ? 'enabled' : 'disabled'}`);
 
       if (updatedRoute.withIpFilter) {
-        // If enabling IP filter, suggest adding IPs
-        const shouldNavigate = window.confirm(
-            'IP filtering enabled. Would you like to add IP addresses to the whitelist?'
+        // If enabling IP filtering, show notification with action and highlight nav
+        showNotification(
+            'IP filtering enabled. Add IP addresses to the whitelist for this route to take effect.',
+            'info',
+            <Button
+                color="inherit"
+                size="small"
+                onClick={() => goToIpManagement(route.id)}
+            >
+              Manage IPs
+            </Button>
         );
 
-        if (shouldNavigate) {
-          navigate('/ip-management', { state: { routeId: route.id } });
-          return;
+        // Highlight the IP Management nav item if context is available
+        if (updateNavHighlight) {
+          updateNavHighlight('IP_MANAGEMENT');
+          // Reset highlight after 10 seconds
+          setTimeout(() => updateNavHighlight(null), 10000);
         }
+      } else {
+        showNotification(`IP filtering disabled for route ${route.routeId || route.id}`);
       }
 
       await loadRoutes();
@@ -647,6 +670,7 @@ const DashboardPage = () => {
                   onToggleIpFilter={handleToggleIpFilter}
                   onToggleTokenValidation={handleToggleTokenValidation}
                   onToggleRateLimit={handleToggleRateLimit}
+                  onManageIps={goToIpManagement}
               />
           )}
         </Box>
@@ -829,11 +853,13 @@ const DashboardPage = () => {
             autoHideDuration={6000}
             onClose={handleCloseNotification}
             anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            action={notification.action}
         >
           <Alert
               onClose={handleCloseNotification}
               severity={notification.severity}
               sx={{ width: '100%' }}
+              action={notification.action}
           >
             {notification.message}
           </Alert>
