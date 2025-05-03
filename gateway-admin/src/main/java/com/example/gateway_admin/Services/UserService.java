@@ -5,12 +5,23 @@ import com.example.gateway_admin.Entities.User;
 import com.example.gateway_admin.Repositories.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class UserService {
@@ -25,8 +36,19 @@ public class UserService {
     }
 
     /**
+     * Get all users
+     */
+    @Transactional(readOnly = true)
+    public List<UserDTO> getAllUsers() {
+        return userRepository.findAll().stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
      * Get user by username
      */
+    @Transactional(readOnly = true)
     public UserDTO getUserByUsername(String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new EntityNotFoundException("User not found with username: " + username));
@@ -34,20 +56,42 @@ public class UserService {
     }
 
     /**
+     * Get user by ID
+     */
+    @Transactional(readOnly = true)
+    public UserDTO getUserById(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("User not found with id: " + id));
+        return convertToDTO(user);
+    }
+
+    /**
      * Create a new user
      */
     @Transactional
-    public UserDTO createUser(User user) {
+    public UserDTO createUser(String username, String password, String firstName,
+                              String lastName, String email, String role) {
         // Check if username or email already exists
-        if (userRepository.existsByUsername(user.getUsername())) {
+        if (userRepository.existsByUsername(username)) {
             throw new IllegalArgumentException("Username already exists");
         }
-        if (userRepository.existsByEmail(user.getEmail())) {
+        if (userRepository.existsByEmail(email)) {
             throw new IllegalArgumentException("Email already exists");
         }
 
-        // Encrypt password
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        // Create new user
+        User user = new User();
+        user.setUsername(username);
+        user.setPassword(passwordEncoder.encode(password));
+        user.setFirstName(firstName);
+        user.setLastName(lastName);
+        user.setEmail(email);
+        user.setRole(role != null && role.equalsIgnoreCase("Administrator") ? "ADMIN" : "USER");
+        user.setCreatedAt(LocalDateTime.now());
+        user.setUpdatedAt(LocalDateTime.now());
+        user.setTwoFactorEnabled(false);
+        user.setSessionTimeoutMinutes(30);
+        user.setNotificationsEnabled(true);
 
         // Save user
         User savedUser = userRepository.save(user);
@@ -62,12 +106,26 @@ public class UserService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new EntityNotFoundException("User not found with username: " + username));
 
+        // Check email uniqueness if changed
+        if (!user.getEmail().equals(userDTO.getEmail()) &&
+                userRepository.existsByEmail(userDTO.getEmail())) {
+            throw new IllegalArgumentException("Email already in use");
+        }
+
         // Update fields
         user.setFirstName(userDTO.getFirstName());
         user.setLastName(userDTO.getLastName());
         user.setEmail(userDTO.getEmail());
-        user.setJobTitle(userDTO.getJobTitle());
-        user.setDepartment(userDTO.getDepartment());
+
+        if (userDTO.getJobTitle() != null) {
+            user.setJobTitle(userDTO.getJobTitle());
+        }
+
+        if (userDTO.getDepartment() != null) {
+            user.setDepartment(userDTO.getDepartment());
+        }
+
+        user.setUpdatedAt(LocalDateTime.now());
 
         // Save user
         User updatedUser = userRepository.save(user);
@@ -75,7 +133,7 @@ public class UserService {
     }
 
     /**
-     * Update user password
+     * Update password
      */
     @Transactional
     public void updatePassword(String username, String currentPassword, String newPassword) {
@@ -87,8 +145,14 @@ public class UserService {
             throw new IllegalArgumentException("Current password is incorrect");
         }
 
+        // Validate new password
+        if (newPassword.length() < 8) {
+            throw new IllegalArgumentException("Password must be at least 8 characters long");
+        }
+
         // Update password
         user.setPassword(passwordEncoder.encode(newPassword));
+        user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
     }
 
@@ -101,23 +165,21 @@ public class UserService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new EntityNotFoundException("User not found with username: " + username));
 
-        user.setTwoFactorEnabled(twoFactorEnabled);
-        user.setSessionTimeoutMinutes(sessionTimeoutMinutes);
-        user.setNotificationsEnabled(notificationsEnabled);
+        if (twoFactorEnabled != null) {
+            user.setTwoFactorEnabled(twoFactorEnabled);
+        }
 
-        User updatedUser = userRepository.save(user);
-        return convertToDTO(updatedUser);
-    }
+        if (sessionTimeoutMinutes != null) {
+            // Ensure timeout is between reasonable bounds
+            sessionTimeoutMinutes = Math.max(5, Math.min(120, sessionTimeoutMinutes));
+            user.setSessionTimeoutMinutes(sessionTimeoutMinutes);
+        }
 
-    /**
-     * Update profile image URL
-     */
-    @Transactional
-    public UserDTO updateProfileImage(String username, String profileImageUrl) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new EntityNotFoundException("User not found with username: " + username));
+        if (notificationsEnabled != null) {
+            user.setNotificationsEnabled(notificationsEnabled);
+        }
 
-        user.setProfileImageUrl(profileImageUrl);
+        user.setUpdatedAt(LocalDateTime.now());
         User updatedUser = userRepository.save(user);
         return convertToDTO(updatedUser);
     }
@@ -134,9 +196,47 @@ public class UserService {
     }
 
     /**
+     * Update user status (active/inactive)
+     */
+    @Transactional
+    public UserDTO updateUserStatus(Long userId, boolean active) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("User not found with id: " + userId));
+
+        // Don't allow disabling of system admin
+        if (user.getUsername().equals("admin") && !active) {
+            throw new IllegalArgumentException("Cannot disable the system administrator account");
+        }
+
+        // Set status in database - we'll use a boolean field internally
+        // but expose it as a string status in the DTO
+        user.setActive(active);
+        user.setUpdatedAt(LocalDateTime.now());
+
+        User updatedUser = userRepository.save(user);
+        return convertToDTO(updatedUser);
+    }
+
+    /**
+     * Delete a user
+     */
+    @Transactional
+    public void deleteUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("User not found with id: " + userId));
+
+        // Don't allow deleting system admin
+        if (user.getUsername().equals("admin")) {
+            throw new IllegalArgumentException("Cannot delete the system administrator account");
+        }
+
+        userRepository.delete(user);
+    }
+
+    /**
      * Convert User entity to UserDTO
      */
-    private UserDTO convertToDTO(User user) {
+    public UserDTO convertToDTO(User user) {
         UserDTO dto = new UserDTO();
         dto.setId(user.getId());
         dto.setUsername(user.getUsername());
@@ -149,7 +249,20 @@ public class UserService {
         dto.setTwoFactorEnabled(user.getTwoFactorEnabled());
         dto.setSessionTimeoutMinutes(user.getSessionTimeoutMinutes());
         dto.setNotificationsEnabled(user.getNotificationsEnabled());
-        dto.setRole(user.getRole());
+
+        // Convert internal role format to display format
+        if (user.getRole() != null && user.getRole().equals("ADMIN")) {
+            dto.setRole("Administrator");
+        } else {
+            dto.setRole("User");
+        }
+
+        // Convert active flag to status string
+        dto.setStatus(user.isActive() ? "Active" : "Disabled");
+
+        // Add last login time
+        dto.setLastLogin(user.getLastLoginAt());
+
         return dto;
     }
 }

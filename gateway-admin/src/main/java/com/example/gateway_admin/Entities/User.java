@@ -54,6 +54,9 @@ public class User {
     @Column(name = "notifications_enabled")
     private Boolean notificationsEnabled = true;
 
+    @Column(name = "is_active")
+    private boolean active = true;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -65,16 +68,44 @@ public class User {
 
     // Role-based authorization
     @Column(nullable = false)
-    private String role = "USER"; // Default role
+    private String role = "USER"; // Default role: USER or ADMIN
 
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
+        active = true;
     }
 
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+
+    /**
+     * Check if user has administrator privileges
+     * @return true if user is an administrator
+     */
+    @Transient
+    public boolean isAdmin() {
+        return "ADMIN".equals(this.role);
+    }
+
+    /**
+     * Get user's full name
+     * @return formatted full name
+     */
+    @Transient
+    public String getFullName() {
+        return firstName + " " + lastName;
+    }
+
+    /**
+     * Get user status as string
+     * @return "Active" or "Disabled"
+     */
+    @Transient
+    public String getStatus() {
+        return active ? "Active" : "Disabled";
     }
 }

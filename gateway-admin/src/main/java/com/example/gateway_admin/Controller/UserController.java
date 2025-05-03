@@ -1,18 +1,24 @@
 package com.example.gateway_admin.Controller;
 
 import com.example.gateway_admin.DTO.UserDTO;
+import com.example.gateway_admin.Entities.User;
+import com.example.gateway_admin.Repositories.UserRepository;
 import com.example.gateway_admin.Services.UserService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
@@ -20,10 +26,12 @@ import java.util.Map;
 public class UserController {
 
     private final UserService userService;
+    private final UserRepository userRepository;
 
     @Autowired
-    public UserController(UserService userService) {
+    public UserController(UserService userService, UserRepository userRepository) {
         this.userService = userService;
+        this.userRepository = userRepository;
     }
 
     /**
@@ -85,24 +93,120 @@ public class UserController {
     }
 
     /**
-     * Upload profile picture
+     * Get all users (Admin only)
      */
-    @PostMapping("/avatar")
-    public ResponseEntity<?> uploadProfilePicture(@RequestParam("file") MultipartFile file) {
+    @GetMapping("/all")
+    public ResponseEntity<?> getAllUsers() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        String username = auth.getName();
+        if (!auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Requires administrator privileges"));
+        }
+
+        List<UserDTO> users = userService.getAllUsers();
+        return ResponseEntity.ok(users);
+    }
+
+    /**
+     * Create new user (Admin only)
+     */
+    @PostMapping
+    public ResponseEntity<?> createUser(@Valid @RequestBody CreateUserRequest request) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (!auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Requires administrator privileges"));
+        }
 
         try {
-            // In a real app, this would handle file upload to a storage service
-            // For demonstration, we'll just use a placeholder URL
-            String profileImageUrl = "/api/images/profile/" + username + ".jpg";
+            UserDTO newUser = userService.createUser(
+                    request.getUsername(),
+                    request.getPassword(),
+                    request.getFirstName(),
+                    request.getLastName(),
+                    request.getEmail(),
+                    request.getRole()
+            );
 
-            UserDTO updatedUser = userService.updateProfileImage(username, profileImageUrl);
+            return ResponseEntity.status(HttpStatus.CREATED).body(newUser);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Update user status (activate/deactivate) (Admin only)
+     */
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<?> updateUserStatus(
+            @PathVariable Long id,
+            @RequestBody Map<String, Boolean> request) {
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (!auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Requires administrator privileges"));
+        }
+
+        Boolean active = request.get("active");
+        if (active == null) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Status value required"));
+        }
+
+        try {
+            UserDTO updatedUser = userService.updateUserStatus(id, active);
             return ResponseEntity.ok(updatedUser);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Failed to upload profile picture: " + e.getMessage());
+                    .body(Map.of("error", "Failed to update user status: " + e.getMessage()));
         }
+    }
+
+    /**
+     * Delete user (Admin only)
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteUser(@PathVariable Long id) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (!auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"))) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Requires administrator privileges"));
+        }
+
+        try {
+            userService.deleteUser(id);
+            return ResponseEntity.ok(Map.of("message", "User deleted successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Failed to delete user: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Get user session info
+     */
+    @GetMapping("/session")
+    public ResponseEntity<?> getUserSession() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String username = auth.getName();
+
+        User user = userRepository.findByUsername(username).orElse(null);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "User not found"));
+        }
+
+        Map<String, Object> sessionInfo = new HashMap<>();
+        sessionInfo.put("username", username);
+        sessionInfo.put("authorities", auth.getAuthorities().stream()
+                .map(a -> a.getAuthority())
+                .collect(Collectors.toList()));
+        sessionInfo.put("sessionTimeoutMinutes", user.getSessionTimeoutMinutes());
+        sessionInfo.put("lastLogin", user.getLastLoginAt());
+
+        return ResponseEntity.ok(sessionInfo);
     }
 
     /**
@@ -159,6 +263,66 @@ public class UserController {
 
         public void setNotificationsEnabled(Boolean notificationsEnabled) {
             this.notificationsEnabled = notificationsEnabled;
+        }
+    }
+
+    /**
+     * DTO for creating a new user
+     */
+    public static class CreateUserRequest {
+        private String username;
+        private String password;
+        private String firstName;
+        private String lastName;
+        private String email;
+        private String role;
+
+        public String getUsername() {
+            return username;
+        }
+
+        public void setUsername(String username) {
+            this.username = username;
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public void setPassword(String password) {
+            this.password = password;
+        }
+
+        public String getFirstName() {
+            return firstName;
+        }
+
+        public void setFirstName(String firstName) {
+            this.firstName = firstName;
+        }
+
+        public String getLastName() {
+            return lastName;
+        }
+
+        public void setLastName(String lastName) {
+            this.lastName = lastName;
+        }
+
+        public String getEmail() {
+            return email;
+        }
+
+        public void setEmail(String email) {
+            this.email = email;
+        }
+
+        public String getRole() {
+            return role;
+        }
+
+        public void setRole(String role) {
+            this.role = role;
         }
     }
 }

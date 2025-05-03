@@ -1,15 +1,15 @@
 // src/pages/SystemSettingsPage.jsx
 import React, { useState, useEffect, useContext } from 'react';
-import { 
-  Typography, 
-  Box, 
-  Paper, 
-  Button, 
-  TextField, 
-  Grid, 
+import {
+  Typography,
+  Box,
+  Paper,
+  Button,
+  TextField,
+  Grid,
   Avatar,
-  Tab, 
-  Tabs, 
+  Tab,
+  Tabs,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -23,10 +23,27 @@ import {
   TableBody,
   TableRow,
   TableCell,
-  Chip
+  Chip,
+  InputAdornment,
+  IconButton,
+  Divider,
+  Switch,
+  FormControlLabel,
+  MenuItem,
+  Select,
+  FormControl,
+  InputLabel,
+  Card,
+  CardContent,
+  Tooltip,
+  ListItemIcon,
+  Menu
 } from '@mui/material';
+import { styled } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+
+// Icons
 import EditIcon from '@mui/icons-material/Edit';
 import LockIcon from '@mui/icons-material/Lock';
 import SecurityIcon from '@mui/icons-material/Security';
@@ -34,34 +51,107 @@ import PersonIcon from '@mui/icons-material/Person';
 import GroupIcon from '@mui/icons-material/Group';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SettingsIcon from '@mui/icons-material/Settings';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import SearchIcon from '@mui/icons-material/Search';
+import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
+import LogoutIcon from '@mui/icons-material/Logout';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import NotificationsIcon from '@mui/icons-material/Notifications';
+import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import BlockIcon from '@mui/icons-material/Block';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+
 import apiClient from '../apiClient';
 
-// Custom tab panel component for settings sections
+// Styled components
+const StyledTabs = styled(Tabs)(({ theme }) => ({
+  borderBottom: `1px solid ${theme.palette.divider}`,
+  '& .MuiTabs-indicator': {
+    backgroundColor: theme.palette.primary.main,
+    height: 3
+  },
+}));
+
+const StyledTab = styled(Tab)(({ theme }) => ({
+  textTransform: 'none',
+  fontWeight: theme.typography.fontWeightRegular,
+  fontSize: theme.typography.pxToRem(15),
+  marginRight: theme.spacing(1),
+  minHeight: 48,
+  '&.Mui-selected': {
+    fontWeight: theme.typography.fontWeightMedium,
+  },
+}));
+
+const ProfileAvatar = styled(Avatar)(({ theme }) => ({
+  width: 120,
+  height: 120,
+  fontSize: 48,
+  backgroundColor: theme.palette.primary.main,
+  boxShadow: theme.shadows[3],
+  border: `4px solid white`,
+}));
+
+const UploadButton = styled(Button)(({ theme }) => ({
+  position: 'absolute',
+  bottom: 0,
+  right: 0,
+  minWidth: 'auto',
+  width: 36,
+  height: 36,
+  borderRadius: '50%',
+  padding: 0,
+  backgroundColor: theme.palette.common.white,
+  color: theme.palette.grey[800],
+  boxShadow: theme.shadows[2],
+  '&:hover': {
+    backgroundColor: theme.palette.grey[200],
+  },
+}));
+
+const UserRoleChip = styled(Chip)(({ theme, role }) => ({
+  backgroundColor: role === 'Administrator'
+      ? theme.palette.error.light
+      : theme.palette.primary.light,
+  color: 'white',
+  fontWeight: 'bold'
+}));
+
+// Tab Panel component
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
+
   return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`settings-tabpanel-${index}`}
-      aria-labelledby={`settings-tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
-    </div>
+      <div
+          role="tabpanel"
+          hidden={value !== index}
+          id={`settings-tabpanel-${index}`}
+          aria-labelledby={`settings-tab-${index}`}
+          {...other}
+      >
+        {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+      </div>
   );
 }
 
 const SystemSettingsPage = () => {
   const navigate = useNavigate();
   const { logout, user, updateUserProfile } = useContext(AuthContext);
-  
-  // State management
-  const [topTab, setTopTab] = useState('GENERAL');
+
+  // State for active tab
   const [activeTab, setActiveTab] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [notification, setNotification] = useState({ open: false, message: '', severity: 'success' });
-  
+
+  // Notification system
+  const [notification, setNotification] = useState({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
+
   // Profile form state
   const [profileData, setProfileData] = useState({
     firstName: user?.firstName || '',
@@ -70,19 +160,26 @@ const SystemSettingsPage = () => {
     jobTitle: user?.jobTitle || '',
     department: user?.department || ''
   });
-  
-  // Password change form state
+
+  // Password change form state with visibility toggles
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: ''
   });
-  
+  const [passwordVisibility, setPasswordVisibility] = useState({
+    currentPassword: false,
+    newPassword: false,
+    confirmPassword: false
+  });
+
   // Profile picture state
   const [profileImage, setProfileImage] = useState(user?.profileImage || null);
   const [openPictureDialog, setOpenPictureDialog] = useState(false);
-  
-  // Error states for form validation
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+
+  // Form validation states
   const [profileErrors, setProfileErrors] = useState({});
   const [passwordErrors, setPasswordErrors] = useState({});
 
@@ -95,6 +192,8 @@ const SystemSettingsPage = () => {
 
   // User management state
   const [users, setUsers] = useState([]);
+  const [filteredUsers, setFilteredUsers] = useState([]);
+  const [userSearchTerm, setUserSearchTerm] = useState('');
   const [openAddUserDialog, setOpenAddUserDialog] = useState(false);
   const [newUserData, setNewUserData] = useState({
     username: '',
@@ -105,88 +204,85 @@ const SystemSettingsPage = () => {
     role: 'User'
   });
   const [newUserErrors, setNewUserErrors] = useState({});
+  const [newUserPasswordVisible, setNewUserPasswordVisible] = useState(false);
+
+  // User actions menu
+  const [userActionsAnchorEl, setUserActionsAnchorEl] = useState(null);
+  const [selectedUserId, setSelectedUserId] = useState(null);
+
+  // Confirmation dialogs
+  const [confirmLogoutDialog, setConfirmLogoutDialog] = useState(false);
+  const [confirmDeleteDialog, setConfirmDeleteDialog] = useState(false);
 
   // Load user data
   useEffect(() => {
-    // In a real implementation, you would fetch this from your API
-    // This is a placeholder for demonstration purposes
-    const loadUserProfile = async () => {
-      try {
-        setLoading(true);
-        // In a real app, you would fetch user data:
-        // const response = await apiClient.get('/api/user/profile');
-        // const userData = response.data;
-        
-        // Simulating data load delay
-        await new Promise(resolve => setTimeout(resolve, 800));
-        
-        // For demo purposes, use hardcoded sample data
-        const sampleUserData = {
-          firstName: 'John',
-          lastName: 'Doe',
-          email: 'john.doe@example.com',
-          jobTitle: 'System Administrator',
-          department: 'IT Operations',
-          twoFactorEnabled: false,
-          sessionTimeout: 30,
-          notificationsEnabled: true
-        };
-        
-        setProfileData(sampleUserData);
-        setSecuritySettings({
-          twoFactorEnabled: sampleUserData.twoFactorEnabled,
-          sessionTimeout: sampleUserData.sessionTimeout,
-          notificationsEnabled: sampleUserData.notificationsEnabled
-        });
-
-        // Sample users data
-        setUsers([
-          {
-            id: 5,
-            username: 'admin',
-            role: 'Administrator',
-            status: 'Active'
-          },
-          {
-            id: 6,
-            username: 'user',
-            role: 'User',
-            status: 'Active'
-          },
-          {
-            id: 8,
-            username: 'admin2',
-            role: 'Administrator',
-            status: 'Active'
-          },
-          {
-            id: 9,
-            username: 'Yassine',
-            role: 'User',
-            status: 'Active'
-          },
-          {
-            id: 7,
-            username: 'Mimi',
-            role: 'User',
-            status: 'Disabled'
-          }
-        ]);
-      } catch (error) {
-        showNotification('Error loading user profile', 'error');
-      } finally {
-        setLoading(false);
-      }
-    };
-    
     loadUserProfile();
+    loadUsers();
   }, []);
 
-  // Handlers
-  const handleTopTabChange = (tab) => {
-    setTopTab(tab);
+  // Filter users when search term changes
+  useEffect(() => {
+    if (userSearchTerm) {
+      const searchLower = userSearchTerm.toLowerCase();
+      setFilteredUsers(users.filter(user =>
+          user.username.toLowerCase().includes(searchLower) ||
+          user.role.toLowerCase().includes(searchLower) ||
+          user.status.toLowerCase().includes(searchLower)
+      ));
+    } else {
+      setFilteredUsers(users);
+    }
+  }, [userSearchTerm, users]);
+
+  // Load user profile data
+  const loadUserProfile = async () => {
+    try {
+      setLoading(true);
+
+      // In a real app, this would fetch from an API
+      const response = await apiClient.get('/api/user/profile');
+      const userData = response.data;
+
+      setProfileData({
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        email: userData.email,
+        jobTitle: userData.jobTitle,
+        department: userData.department
+      });
+
+      setSecuritySettings({
+        twoFactorEnabled: userData.twoFactorEnabled,
+        sessionTimeout: userData.sessionTimeout,
+        notificationsEnabled: userData.notificationsEnabled
+      });
+    } catch (error) {
+      showNotification('Error loading user profile', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // Load users for user management tab
+  const loadUsers = async () => {
+    try {
+      setLoading(true);
+
+      // Here's the API call that's failing
+      const response = await apiClient.get('/api/user/all');
+      const usersData = response.data;
+
+      setUsers(usersData);
+      setFilteredUsers(usersData);
+    } catch (error) {
+      console.error('Error loading users:', error);
+      showNotification('Error loading users', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Event Handlers
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
   };
@@ -194,7 +290,7 @@ const SystemSettingsPage = () => {
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
     setProfileData(prev => ({ ...prev, [name]: value }));
-    
+
     // Clear error for field when typing
     if (profileErrors[name]) {
       setProfileErrors(prev => ({ ...prev, [name]: '' }));
@@ -204,11 +300,18 @@ const SystemSettingsPage = () => {
   const handlePasswordChange = (e) => {
     const { name, value } = e.target;
     setPasswordData(prev => ({ ...prev, [name]: value }));
-    
+
     // Clear error for field when typing
     if (passwordErrors[name]) {
       setPasswordErrors(prev => ({ ...prev, [name]: '' }));
     }
+  };
+
+  const togglePasswordVisibility = (field) => {
+    setPasswordVisibility(prev => ({
+      ...prev,
+      [field]: !prev[field]
+    }));
   };
 
   const handleSecurityChange = (e) => {
@@ -222,18 +325,42 @@ const SystemSettingsPage = () => {
   const handleNewUserChange = (e) => {
     const { name, value } = e.target;
     setNewUserData(prev => ({ ...prev, [name]: value }));
-    
+
     // Clear error for field when typing
     if (newUserErrors[name]) {
       setNewUserErrors(prev => ({ ...prev, [name]: '' }));
     }
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login', { replace: true });
+  const toggleNewUserPasswordVisibility = () => {
+    setNewUserPasswordVisible(prev => !prev);
   };
 
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setSelectedFile(file);
+
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreviewUrl(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleOpenUserActionsMenu = (event, userId) => {
+    setUserActionsAnchorEl(event.currentTarget);
+    setSelectedUserId(userId);
+  };
+
+  const handleCloseUserActionsMenu = () => {
+    setUserActionsAnchorEl(null);
+    setSelectedUserId(null);
+  };
+
+  // Notification system
   const showNotification = (message, severity = 'success') => {
     setNotification({
       open: true,
@@ -249,34 +376,30 @@ const SystemSettingsPage = () => {
   // Form submission handlers
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
-    
+
     // Validation
     const errors = {};
     if (!profileData.firstName.trim()) errors.firstName = 'First name is required';
     if (!profileData.lastName.trim()) errors.lastName = 'Last name is required';
     if (!profileData.email.trim()) errors.email = 'Email is required';
     if (profileData.email && !profileData.email.includes('@')) errors.email = 'Valid email is required';
-    
+
     if (Object.keys(errors).length > 0) {
       setProfileErrors(errors);
       return;
     }
-    
+
     // Submit form
     try {
       setLoading(true);
-      
-      // In a real app, you would update the profile:
-      // await apiClient.put('/api/user/profile', profileData);
-      
-      // Simulating API call
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
+
+      await apiClient.put('/api/user/profile', profileData);
+
       // Update context
       if (updateUserProfile) {
         updateUserProfile(profileData);
       }
-      
+
       showNotification('Profile updated successfully');
     } catch (error) {
       showNotification('Failed to update profile', 'error');
@@ -287,7 +410,7 @@ const SystemSettingsPage = () => {
 
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
-    
+
     // Validation
     const errors = {};
     if (!passwordData.currentPassword) errors.currentPassword = 'Current password is required';
@@ -299,32 +422,29 @@ const SystemSettingsPage = () => {
     if (passwordData.newPassword && passwordData.newPassword.length < 8) {
       errors.newPassword = 'Password must be at least 8 characters';
     }
-    
+
     if (Object.keys(errors).length > 0) {
       setPasswordErrors(errors);
       return;
     }
-    
+
     // Submit form
     try {
       setLoading(true);
-      
-      // In a real app, you would update the password:
-      // await apiClient.put('/api/user/password', {
-      //   currentPassword: passwordData.currentPassword,
-      //   newPassword: passwordData.newPassword
-      // });
-      
+
+
+      await apiClient.put('/api/user/password', passwordData);
+
       // Simulating API call
       await new Promise(resolve => setTimeout(resolve, 800));
-      
+
       // Reset form
       setPasswordData({
         currentPassword: '',
         newPassword: '',
         confirmPassword: ''
       });
-      
+
       showNotification('Password updated successfully');
     } catch (error) {
       showNotification('Failed to update password', 'error');
@@ -335,16 +455,14 @@ const SystemSettingsPage = () => {
 
   const handleUpdateSecurity = async (e) => {
     e.preventDefault();
-    
+
     try {
       setLoading(true);
-      
-      // In a real app, you would update security settings:
-      // await apiClient.put('/api/user/security', securitySettings);
-      
-      // Simulating API call
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
+
+      await apiClient.put('/api/user/security', securitySettings);
+
+
+
       showNotification('Security settings updated successfully');
     } catch (error) {
       showNotification('Failed to update security settings', 'error');
@@ -355,7 +473,7 @@ const SystemSettingsPage = () => {
 
   const handleAddUser = async (e) => {
     e.preventDefault();
-    
+
     // Validation
     const errors = {};
     if (!newUserData.username.trim()) errors.username = 'Username is required';
@@ -365,31 +483,35 @@ const SystemSettingsPage = () => {
     if (newUserData.email && !newUserData.email.includes('@')) errors.email = 'Valid email is required';
     if (!newUserData.password.trim()) errors.password = 'Password is required';
     if (newUserData.password && newUserData.password.length < 8) errors.password = 'Password must be at least 8 characters';
-    
+
     if (Object.keys(errors).length > 0) {
       setNewUserErrors(errors);
       return;
     }
-    
+
     try {
       setLoading(true);
-      
-      // In a real app, you would create a new user:
-      // await apiClient.post('/api/users', newUserData);
-      
+
+
+      await apiClient.post('/api/user', newUserData);
+
       // Simulating API call
       await new Promise(resolve => setTimeout(resolve, 800));
-      
+
       // Add the new user to the list with a generated ID
       const newUser = {
         id: Math.max(...users.map(u => u.id)) + 1,
         username: newUserData.username,
+        firstName: newUserData.firstName,
+        lastName: newUserData.lastName,
+        email: newUserData.email,
         role: newUserData.role,
-        status: 'Active'
+        status: 'Active',
+        lastLogin: new Date().toISOString()
       };
-      
+
       setUsers(prev => [...prev, newUser]);
-      
+
       // Reset form and close dialog
       setNewUserData({
         username: '',
@@ -400,7 +522,7 @@ const SystemSettingsPage = () => {
         role: 'User'
       });
       setOpenAddUserDialog(false);
-      
+
       showNotification('User created successfully');
     } catch (error) {
       showNotification('Failed to create user', 'error');
@@ -409,578 +531,946 @@ const SystemSettingsPage = () => {
     }
   };
 
-  const handleDeleteUser = async (userId) => {
-    if (userId === 5) {
+  const handleDeleteUser = async () => {
+    if (!selectedUserId) return;
+
+    if (selectedUserId === 5) {
       showNotification('Cannot delete the primary admin user', 'error');
+      setConfirmDeleteDialog(false);
+      handleCloseUserActionsMenu();
       return;
     }
-    
-    if (!window.confirm('Are you sure you want to delete this user?')) {
-      return;
-    }
-    
+
     try {
       setLoading(true);
-      
-      // In a real app, you would delete the user:
-      // await apiClient.delete(`/api/users/${userId}`);
-      
+
+
+      await apiClient.delete(`/api/user/${userId}`);
+
       // Simulating API call
       await new Promise(resolve => setTimeout(resolve, 800));
-      
+
       // Remove the user from the list
-      setUsers(prev => prev.filter(user => user.id !== userId));
-      
+      setUsers(prev => prev.filter(user => user.id !== selectedUserId));
+
       showNotification('User deleted successfully');
     } catch (error) {
       showNotification('Failed to delete user', 'error');
     } finally {
       setLoading(false);
+      setConfirmDeleteDialog(false);
+      handleCloseUserActionsMenu();
     }
   };
 
   const handleUpdateUserStatus = async (userId, currentStatus) => {
     if (userId === 5) {
       showNotification('Cannot modify the primary admin user', 'error');
+      handleCloseUserActionsMenu();
       return;
     }
-    
+
     const newStatus = currentStatus === 'Active' ? 'Disabled' : 'Active';
-    
+
     try {
       setLoading(true);
-      
-      // In a real app, you would update the user status:
-      // await apiClient.patch(`/api/users/${userId}`, { status: newStatus });
-      
-      // Simulating API call
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
+
+
+      await apiClient.patch(`/api/user/${userId}/status`, { active: true/false });
+
       // Update the user status in the list
-      setUsers(prev => prev.map(user => 
-        user.id === userId ? { ...user, status: newStatus } : user
+      setUsers(prev => prev.map(user =>
+          user.id === userId ? { ...user, status: newStatus } : user
       ));
-      
+
       showNotification(`User ${newStatus === 'Active' ? 'activated' : 'disabled'} successfully`);
     } catch (error) {
       showNotification('Failed to update user status', 'error');
     } finally {
       setLoading(false);
+      handleCloseUserActionsMenu();
     }
   };
 
-  const handleUploadPicture = () => {
-    // In a real app, you would implement file upload
-    setOpenPictureDialog(false);
-    showNotification('Profile picture updated');
+  const handleUploadPicture = async () => {
+    if (!selectedFile) {
+      setOpenPictureDialog(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // In a real app, you would upload the file:
+      // const formData = new FormData();
+      // formData.append('file', selectedFile);
+      // await apiClient.post('/api/user/avatar', formData);
+
+      // Simulating API call
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      // Update profile image with preview URL
+      setProfileImage(previewUrl);
+      setOpenPictureDialog(false);
+      showNotification('Profile picture updated successfully');
+    } catch (error) {
+      showNotification('Failed to upload profile picture', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Get user initials for avatar
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
+
+  // Helper functions
   const getInitials = () => {
     return `${profileData.firstName.charAt(0)}${profileData.lastName.charAt(0)}`;
   };
 
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Never';
+
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat('en-US', {
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    }).format(date);
+  };
+
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h5" component="h1" sx={{ mb: 3 }}>
-        System Settings
-      </Typography>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="h5" component="h1" sx={{ mb: 3, fontWeight: 'bold' }}>
+          System Settings
+        </Typography>
 
-      {/* Top level tabs */}
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-        <Box sx={{ display: 'flex' }}>
-          <Box 
-            sx={{ 
-              p: 2, 
-              cursor: 'pointer',
-              borderBottom: topTab === 'GENERAL' ? 2 : 0,
-              borderColor: topTab === 'GENERAL' ? 'primary.main' : 'transparent',
-              color: topTab === 'GENERAL' ? 'primary.main' : 'text.primary',
-              fontWeight: topTab === 'GENERAL' ? 'bold' : 'normal'
-            }}
-            onClick={() => handleTopTabChange('GENERAL')}
+        <Paper elevation={2} sx={{ borderRadius: 2, mb: 3, overflow: 'hidden' }}>
+          <StyledTabs
+              value={activeTab}
+              onChange={handleTabChange}
+              variant="fullWidth"
+              aria-label="Settings tabs"
           >
-            GENERAL
-          </Box>
-          <Box 
-            sx={{ 
-              p: 2, 
-              cursor: 'pointer',
-              borderBottom: topTab === 'USER_MANAGEMENT' ? 2 : 0,
-              borderColor: topTab === 'USER_MANAGEMENT' ? 'primary.main' : 'transparent',
-              color: topTab === 'USER_MANAGEMENT' ? 'primary.main' : 'text.primary',
-              fontWeight: topTab === 'USER_MANAGEMENT' ? 'bold' : 'normal'
-            }}
-            onClick={() => handleTopTabChange('USER_MANAGEMENT')}
-          >
-            USER MANAGEMENT
-          </Box>
-        </Box>
-      </Box>
+            <StyledTab
+                icon={<PersonIcon sx={{ mr: 1 }} />}
+                label="Profile"
+                iconPosition="start"
+            />
+            <StyledTab
+                icon={<LockIcon sx={{ mr: 1 }} />}
+                label="Password"
+                iconPosition="start"
+            />
+            <StyledTab
+                icon={<SecurityIcon sx={{ mr: 1 }} />}
+                label="Security"
+                iconPosition="start"
+            />
+            <StyledTab
+                icon={<GroupIcon sx={{ mr: 1 }} />}
+                label="User Management"
+                iconPosition="start"
+            />
+          </StyledTabs>
 
-      {/* General Settings Content */}
-      {topTab === 'GENERAL' && (
-        <Paper sx={{ width: '100%', mb: 3 }}>
-          <Tabs 
-            value={activeTab} 
-            onChange={handleTabChange} 
-            variant="fullWidth"
-            textColor="primary"
-            indicatorColor="primary"
-          >
-            <Tab icon={<PersonIcon />} label="Profile" />
-            <Tab icon={<LockIcon />} label="Password" />
-            <Tab icon={<SecurityIcon />} label="Security" />
-          </Tabs>
-          
-          {/* Profile tab */}
+          {/* Profile Tab */}
           <TabPanel value={activeTab} index={0}>
             <Box component="form" onSubmit={handleUpdateProfile}>
-              <Grid container spacing={3}>
-                <Grid item xs={12} md={4} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <Avatar 
-                    sx={{ 
-                      width: 120, 
-                      height: 120, 
-                      fontSize: 48,
-                      mb: 2,
-                      bgcolor: profileImage ? 'transparent' : 'primary.main'
-                    }}
-                    src={profileImage}
-                  >
-                    {!profileImage && getInitials()}
-                  </Avatar>
-                  <Button 
-                    variant="outlined" 
-                    startIcon={<EditIcon />} 
-                    onClick={() => setOpenPictureDialog(true)}
-                  >
-                    Change Picture
-                  </Button>
+              <Grid container spacing={4}>
+                <Grid item xs={12} md={4} sx={{ position: 'relative' }}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <Box sx={{ position: 'relative', mb: 2 }}>
+                      <ProfileAvatar>
+                        {getInitials()}
+                      </ProfileAvatar>
+                      <UploadButton
+                          variant="contained"
+                          onClick={() => setOpenPictureDialog(true)}
+                      >
+                        <PhotoCameraIcon fontSize="small" />
+                      </UploadButton>
+                    </Box>
+
+                    <Typography variant="h6" gutterBottom>
+                      {profileData.firstName} {profileData.lastName}
+                    </Typography>
+
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {profileData.jobTitle}
+                    </Typography>
+
+                    <Typography variant="body2" color="text.secondary">
+                      {profileData.department}
+                    </Typography>
+                  </Box>
                 </Grid>
+
                 <Grid item xs={12} md={8}>
+                  <Typography variant="h6" gutterBottom>
+                    Personal Information
+                  </Typography>
+
                   <Grid container spacing={2}>
                     <Grid item xs={12} sm={6}>
                       <TextField
-                        name="firstName"
-                        label="First Name"
-                        fullWidth
-                        value={profileData.firstName}
-                        onChange={handleProfileChange}
-                        error={!!profileErrors.firstName}
-                        helperText={profileErrors.firstName}
+                          name="firstName"
+                          label="First Name"
+                          fullWidth
+                          value={profileData.firstName}
+                          onChange={handleProfileChange}
+                          error={!!profileErrors.firstName}
+                          helperText={profileErrors.firstName}
+                          variant="outlined"
                       />
                     </Grid>
+
                     <Grid item xs={12} sm={6}>
                       <TextField
-                        name="lastName"
-                        label="Last Name"
-                        fullWidth
-                        value={profileData.lastName}
-                        onChange={handleProfileChange}
-                        error={!!profileErrors.lastName}
-                        helperText={profileErrors.lastName}
+                          name="lastName"
+                          label="Last Name"
+                          fullWidth
+                          value={profileData.lastName}
+                          onChange={handleProfileChange}
+                          error={!!profileErrors.lastName}
+                          helperText={profileErrors.lastName}
+                          variant="outlined"
                       />
                     </Grid>
+
                     <Grid item xs={12}>
                       <TextField
-                        name="email"
-                        label="Email Address"
-                        fullWidth
-                        value={profileData.email}
-                        onChange={handleProfileChange}
-                        error={!!profileErrors.email}
-                        helperText={profileErrors.email}
+                          name="email"
+                          label="Email Address"
+                          fullWidth
+                          value={profileData.email}
+                          onChange={handleProfileChange}
+                          error={!!profileErrors.email}
+                          helperText={profileErrors.email}
+                          variant="outlined"
                       />
                     </Grid>
+
                     <Grid item xs={12} sm={6}>
                       <TextField
-                        name="jobTitle"
-                        label="Job Title"
-                        fullWidth
-                        value={profileData.jobTitle}
-                        onChange={handleProfileChange}
+                          name="jobTitle"
+                          label="Job Title"
+                          fullWidth
+                          value={profileData.jobTitle}
+                          onChange={handleProfileChange}
+                          variant="outlined"
                       />
                     </Grid>
+
                     <Grid item xs={12} sm={6}>
                       <TextField
-                        name="department"
-                        label="Department"
-                        fullWidth
-                        value={profileData.department}
-                        onChange={handleProfileChange}
+                          name="department"
+                          label="Department"
+                          fullWidth
+                          value={profileData.department}
+                          onChange={handleProfileChange}
+                          variant="outlined"
                       />
                     </Grid>
                   </Grid>
+
                   <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
                     <Button
-                      type="submit"
-                      variant="contained"
-                      color="primary"
-                      disabled={loading}
+                        type="submit"
+                        variant="contained"
+                        color="primary"
+                        disabled={loading}
+                        startIcon={loading ? <CircularProgress size={20} /> : <EditIcon />}
                     >
-                      {loading ? <CircularProgress size={24} /> : 'Update Profile'}
+                      {loading ? 'Updating...' : 'Update Profile'}
                     </Button>
                   </Box>
                 </Grid>
               </Grid>
             </Box>
           </TabPanel>
-          
-          {/* Password tab */}
+
+          {/* Password Tab */}
           <TabPanel value={activeTab} index={1}>
-            <Box component="form" onSubmit={handleUpdatePassword} sx={{ maxWidth: 500, mx: 'auto' }}>
+            <Box component="form" onSubmit={handleUpdatePassword} sx={{ maxWidth: 600, mx: 'auto' }}>
+              <Typography variant="h6" gutterBottom>
+                Change Password
+              </Typography>
+
+              <Typography variant="body2" color="text.secondary" paragraph>
+                To change your password, please enter your current password followed by your new password.
+              </Typography>
+
               <Grid container spacing={3}>
                 <Grid item xs={12}>
                   <TextField
-                    name="currentPassword"
-                    label="Current Password"
-                    type="password"
-                    fullWidth
-                    value={passwordData.currentPassword}
-                    onChange={handlePasswordChange}
-                    error={!!passwordErrors.currentPassword}
-                    helperText={passwordErrors.currentPassword}
+                      name="currentPassword"
+                      label="Current Password"
+                      type={passwordVisibility.currentPassword ? 'text' : 'password'}
+                      fullWidth
+                      value={passwordData.currentPassword}
+                      onChange={handlePasswordChange}
+                      error={!!passwordErrors.currentPassword}
+                      helperText={passwordErrors.currentPassword}
+                      InputProps={{
+                        endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                  aria-label="toggle current password visibility"
+                                  onClick={() => togglePasswordVisibility('currentPassword')}
+                                  edge="end"
+                              >
+                                {passwordVisibility.currentPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                              </IconButton>
+                            </InputAdornment>
+                        ),
+                      }}
                   />
                 </Grid>
+
                 <Grid item xs={12}>
                   <TextField
-                    name="newPassword"
-                    label="New Password"
-                    type="password"
-                    fullWidth
-                    value={passwordData.newPassword}
-                    onChange={handlePasswordChange}
-                    error={!!passwordErrors.newPassword}
-                    helperText={passwordErrors.newPassword}
+                      name="newPassword"
+                      label="New Password"
+                      type={passwordVisibility.newPassword ? 'text' : 'password'}
+                      fullWidth
+                      value={passwordData.newPassword}
+                      onChange={handlePasswordChange}
+                      error={!!passwordErrors.newPassword}
+                      helperText={passwordErrors.newPassword || 'Password must be at least 8 characters long'}
+                      InputProps={{
+                        endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                  aria-label="toggle new password visibility"
+                                  onClick={() => togglePasswordVisibility('newPassword')}
+                                  edge="end"
+                              >
+                                {passwordVisibility.newPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                              </IconButton>
+                            </InputAdornment>
+                        ),
+                      }}
                   />
                 </Grid>
+
                 <Grid item xs={12}>
                   <TextField
-                    name="confirmPassword"
-                    label="Confirm New Password"
-                    type="password"
-                    fullWidth
-                    value={passwordData.confirmPassword}
-                    onChange={handlePasswordChange}
-                    error={!!passwordErrors.confirmPassword}
-                    helperText={passwordErrors.confirmPassword}
+                      name="confirmPassword"
+                      label="Confirm New Password"
+                      type={passwordVisibility.confirmPassword ? 'text' : 'password'}
+                      fullWidth
+                      value={passwordData.confirmPassword}
+                      onChange={handlePasswordChange}
+                      error={!!passwordErrors.confirmPassword}
+                      helperText={passwordErrors.confirmPassword}
+                      InputProps={{
+                        endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                  aria-label="toggle confirm password visibility"
+                                  onClick={() => togglePasswordVisibility('confirmPassword')}
+                                  edge="end"
+                              >
+                                {passwordVisibility.confirmPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                              </IconButton>
+                            </InputAdornment>
+                        ),
+                      }}
                   />
                 </Grid>
+
                 <Grid item xs={12}>
                   <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
                     <Button
-                      type="submit"
-                      variant="contained"
-                      color="primary"
-                      disabled={loading}
+                        type="submit"
+                        variant="contained"
+                        color="primary"
+                        disabled={loading}
+                        startIcon={loading ? <CircularProgress size={20} /> : <LockIcon />}
                     >
-                      {loading ? <CircularProgress size={24} /> : 'Update Password'}
+                      {loading ? 'Updating...' : 'Update Password'}
+                    </Button>
+                  </Box>
+                </Grid>
+              </Grid>
+
+              <Box sx={{ mt: 4 }}>
+                <Typography variant="h6" gutterBottom>
+                  Password Requirements
+                </Typography>
+
+                <Typography variant="body2" color="text.secondary">
+                  • Minimum 8 characters<br />
+                  • Include at least one uppercase letter<br />
+                  • Include at least one lowercase letter<br />
+                  • Include at least one number<br />
+                  • Include at least one special character
+                </Typography>
+              </Box>
+            </Box>
+          </TabPanel>
+
+          {/* Security Tab */}
+          <TabPanel value={activeTab} index={2}>
+            <Box component="form" onSubmit={handleUpdateSecurity} sx={{ maxWidth: 800, mx: 'auto' }}>
+              <Typography variant="h6" gutterBottom>
+                Security Settings
+              </Typography>
+
+              <Grid container spacing={3}>
+                <Grid item xs={12}>
+                  <Card variant="outlined" sx={{ mb: 3 }}>
+                    <CardContent>
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                        <VerifiedUserIcon sx={{ color: 'primary.main', mr: 2, mt: 0.5 }} />
+                        <Box>
+                          <Typography variant="subtitle1" fontWeight="medium">
+                            Two-Factor Authentication
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                            Add an extra layer of security to your account by requiring a verification code in addition to your password.
+                          </Typography>
+                          <FormControlLabel
+                              control={
+                                <Switch
+                                    name="twoFactorEnabled"
+                                    checked={securitySettings.twoFactorEnabled}
+                                    onChange={handleSecurityChange}
+                                    color="primary"
+                                />
+                              }
+                              label={securitySettings.twoFactorEnabled ? "Enabled" : "Disabled"}
+                          />
+                        </Box>
+                      </Box>
+                    </CardContent>
+                  </Card>
+
+                  <Card variant="outlined" sx={{ mb: 3 }}>
+                    <CardContent>
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                        <AccessTimeIcon sx={{ color: 'primary.main', mr: 2, mt: 0.5 }} />
+                        <Box sx={{ width: '100%' }}>
+                          <Typography variant="subtitle1" fontWeight="medium">
+                            Session Timeout
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                            Automatically log out after a period of inactivity for security.
+                          </Typography>
+                          <Grid container alignItems="center" spacing={2}>
+                            <Grid item xs={12} sm={8} md={6}>
+                              <TextField
+                                  name="sessionTimeout"
+                                  label="Timeout (minutes)"
+                                  type="number"
+                                  fullWidth
+                                  value={securitySettings.sessionTimeout}
+                                  onChange={handleSecurityChange}
+                                  InputProps={{ inputProps: { min: 5, max: 120 } }}
+                              />
+                            </Grid>
+                            <Grid item>
+                              <Typography variant="body2" color="text.secondary">
+                                {securitySettings.sessionTimeout < 15 && "Short timeout for high security"}
+                                {securitySettings.sessionTimeout >= 15 && securitySettings.sessionTimeout < 45 && "Balanced security"}
+                                {securitySettings.sessionTimeout >= 45 && "Extended session"}
+                              </Typography>
+                            </Grid>
+                          </Grid>
+                        </Box>
+                      </Box>
+                    </CardContent>
+                  </Card>
+
+                  <Card variant="outlined">
+                    <CardContent>
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                        <NotificationsIcon sx={{ color: 'primary.main', mr: 2, mt: 0.5 }} />
+                        <Box>
+                          <Typography variant="subtitle1" fontWeight="medium">
+                            Email Notifications
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                            Receive email notifications for important security events like password changes or login attempts.
+                          </Typography>
+                          <FormControlLabel
+                              control={
+                                <Switch
+                                    name="notificationsEnabled"
+                                    checked={securitySettings.notificationsEnabled}
+                                    onChange={handleSecurityChange}
+                                    color="primary"
+                                />
+                              }
+                              label={securitySettings.notificationsEnabled ? "Enabled" : "Disabled"}
+                          />
+                        </Box>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button
+                        type="submit"
+                        variant="contained"
+                        color="primary"
+                        disabled={loading}
+                        startIcon={loading ? <CircularProgress size={20} /> : <SecurityIcon />}
+                    >
+                      {loading ? 'Updating...' : 'Update Security Settings'}
                     </Button>
                   </Box>
                 </Grid>
               </Grid>
             </Box>
           </TabPanel>
-          
-          {/* Security tab */}
-          <TabPanel value={activeTab} index={2}>
-            <Box component="form" onSubmit={handleUpdateSecurity} sx={{ maxWidth: 600, mx: 'auto' }}>
-              <Grid container spacing={3}>
-                <Grid item xs={12}>
-                  <Typography variant="h6" gutterBottom>
-                    Security Settings
-                  </Typography>
-                  <Box sx={{ mt: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                      <Typography>Two-Factor Authentication</Typography>
-                      <Button
-                        variant={securitySettings.twoFactorEnabled ? "outlined" : "contained"}
-                        color={securitySettings.twoFactorEnabled ? "error" : "success"}
-                        onClick={() => setSecuritySettings(prev => ({
-                          ...prev,
-                          twoFactorEnabled: !prev.twoFactorEnabled
-                        }))}
-                      >
-                        {securitySettings.twoFactorEnabled ? 'Disable' : 'Enable'}
-                      </Button>
-                    </Box>
-                    
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                      <Typography>Session Timeout (minutes)</Typography>
-                      <TextField
-                        name="sessionTimeout"
-                        type="number"
-                        value={securitySettings.sessionTimeout}
-                        onChange={handleSecurityChange}
-                        InputProps={{ inputProps: { min: 5, max: 120 } }}
-                        sx={{ width: 100 }}
-                      />
-                    </Box>
-                    
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                      <Typography>Email Notifications</Typography>
-                      <Button
-                        variant={securitySettings.notificationsEnabled ? "outlined" : "contained"}
-                        color={securitySettings.notificationsEnabled ? "error" : "success"}
-                        onClick={() => setSecuritySettings(prev => ({
-                          ...prev,
-                          notificationsEnabled: !prev.notificationsEnabled
-                        }))}
-                      >
-                        {securitySettings.notificationsEnabled ? 'Disable' : 'Enable'}
-                      </Button>
-                    </Box>
-                  </Box>
-                </Grid>
-                <Grid item xs={12}>
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <Button
-                      type="submit"
+
+          {/* User Management Tab */}
+          <TabPanel value={activeTab} index={3}>
+            <Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  User Management
+                </Typography>
+
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <TextField
+                      placeholder="Search users..."
+                      variant="outlined"
+                      size="small"
+                      value={userSearchTerm}
+                      onChange={(e) => setUserSearchTerm(e.target.value)}
+                      InputProps={{
+                        startAdornment: (
+                            <InputAdornment position="start">
+                              <SearchIcon fontSize="small" />
+                            </InputAdornment>
+                        ),
+                      }}
+                  />
+
+                  <Button
                       variant="contained"
                       color="primary"
-                      disabled={loading}
-                    >
-                      {loading ? <CircularProgress size={24} /> : 'Save Security Settings'}
-                    </Button>
-                  </Box>
-                </Grid>
-              </Grid>
+                      startIcon={<PersonIcon />}
+                      onClick={() => setOpenAddUserDialog(true)}
+                  >
+                    Add User
+                  </Button>
+                </Box>
+              </Box>
+
+              <TableContainer component={Paper} variant="outlined">
+                <Table sx={{ minWidth: 650 }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Username</TableCell>
+                      <TableCell>Full Name</TableCell>
+                      <TableCell>Email</TableCell>
+                      <TableCell>Role</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Last Login</TableCell>
+                      <TableCell align="right">Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {loading && filteredUsers.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                            <CircularProgress size={24} sx={{ mr: 1 }} />
+                            Loading users...
+                          </TableCell>
+                        </TableRow>
+                    ) : filteredUsers.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                            <Typography variant="body2" color="text.secondary">
+                              No users found matching your search
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                    ) : (
+                        filteredUsers.map((user) => (
+                            <TableRow
+                                key={user.id}
+                                hover
+                                sx={{
+                                  opacity: user.status === 'Disabled' ? 0.7 : 1,
+                                  '&:last-child td, &:last-child th': { border: 0 }
+                                }}
+                            >
+                              <TableCell component="th" scope="row">
+                                {user.username}
+                              </TableCell>
+                              <TableCell>
+                                {user.firstName} {user.lastName}
+                              </TableCell>
+                              <TableCell>{user.email}</TableCell>
+                              <TableCell>
+                                <UserRoleChip
+                                    label={user.role}
+                                    role={user.role}
+                                    size="small"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                    icon={user.status === 'Active' ? <CheckCircleIcon /> : <BlockIcon />}
+                                    label={user.status}
+                                    color={user.status === 'Active' ? 'success' : 'default'}
+                                    size="small"
+                                    variant="outlined"
+                                />
+                              </TableCell>
+                              <TableCell>{formatDate(user.lastLogin)}</TableCell>
+                              <TableCell align="right">
+                                <IconButton
+                                    aria-label="User actions"
+                                    aria-controls={`user-menu-${user.id}`}
+                                    aria-haspopup="true"
+                                    onClick={(e) => handleOpenUserActionsMenu(e, user.id)}
+                                    size="small"
+                                >
+                                  <MoreVertIcon />
+                                </IconButton>
+                              </TableCell>
+                            </TableRow>
+                        ))
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             </Box>
           </TabPanel>
         </Paper>
-      )}
 
-      {/* User Management Content */}
-      {topTab === 'USER_MANAGEMENT' && (
-        <Paper sx={{ p: 3 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Typography variant="h6">
-              Manage User Accounts
-            </Typography>
-            <Button 
-              variant="contained" 
-              color="primary"
-              onClick={() => setOpenAddUserDialog(true)}
+        {/* Logout Section */}
+        <Paper elevation={2} sx={{ p: 3, borderRadius: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box>
+              <Typography variant="h6" fontWeight="medium">
+                Account Management
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Log out of your account or manage your account sessions
+              </Typography>
+            </Box>
+
+            <Button
+                variant="outlined"
+                color="error"
+                startIcon={<LogoutIcon />}
+                onClick={() => setConfirmLogoutDialog(true)}
             >
-              Add New User
+              Log Out
             </Button>
           </Box>
-
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>ID</TableCell>
-                  <TableCell>Username</TableCell>
-                  <TableCell>Role</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {users.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>{user.id}</TableCell>
-                    <TableCell>{user.username}</TableCell>
-                    <TableCell>{user.role}</TableCell>
-                    <TableCell>
-                      <Chip 
-                        label={user.status} 
-                        color={user.status === 'Active' ? 'success' : 'error'}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell align="right">
-                      <Button
-                        sx={{ minWidth: 'auto', p: 1, mr: 1 }}
-                        color="primary"
-                        onClick={() => handleUpdateUserStatus(user.id, user.status)}
-                      >
-                        <EditIcon fontSize="small" />
-                      </Button>
-                      <Button
-                        sx={{ minWidth: 'auto', p: 1 }}
-                        color="error"
-                        onClick={() => handleDeleteUser(user.id)}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
         </Paper>
-      )}
 
-      {/* Logout section */}
-      <Paper sx={{ p: 3, mt: 3 }}>
-        <Typography variant="h6" sx={{ mb: 2 }}>
-          Account Management
-        </Typography>
-        <Typography sx={{ mb: 2 }}>
-          You can log out of your account by clicking the button below. This will immediately end your current session.
-        </Typography>
+        {/* Profile Picture Dialog */}
+        <Dialog
+            open={openPictureDialog}
+            onClose={() => setOpenPictureDialog(false)}
+            maxWidth="sm"
+            fullWidth
+        >
+          <DialogTitle>Update Profile Picture</DialogTitle>
+          <DialogContent>
+            <Box sx={{ textAlign: 'center', my: 2 }}>
+              {previewUrl ? (
+                  <Avatar
+                      src={previewUrl}
+                      alt="Preview"
+                      sx={{ width: 150, height: 150, mx: 'auto', mb: 2 }}
+                  />
+              ) : (
+                  <Avatar
+                      sx={{ width: 150, height: 150, mx: 'auto', mb: 2, fontSize: 60 }}
+                  >
+                    {getInitials()}
+                  </Avatar>
+              )}
 
-        <Button
-          variant="contained"
-          sx={{
-            backgroundColor: 'error.main',
-            '&:hover': { backgroundColor: 'error.dark' },
-            color: 'white',
-            fontWeight: 'bold',
-            mt: 2
+              <Button
+                  variant="contained"
+                  component="label"
+              >
+                Select Image
+                <input
+                    type="file"
+                    hidden
+                    accept="image/*"
+                    onChange={handleFileChange}
+                />
+              </Button>
+
+              <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                Recommended: Square image, at least 200x200 pixels
+              </Typography>
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenPictureDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+                onClick={handleUploadPicture}
+                variant="contained"
+                color="primary"
+                disabled={!selectedFile || loading}
+            >
+              {loading ? <CircularProgress size={24} /> : 'Upload'}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Add User Dialog */}
+        <Dialog
+            open={openAddUserDialog}
+            onClose={() => setOpenAddUserDialog(false)}
+            maxWidth="md"
+            fullWidth
+        >
+          <DialogTitle>Add New User</DialogTitle>
+          <DialogContent>
+            <Box component="form" sx={{ mt: 2 }}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                      name="username"
+                      label="Username"
+                      fullWidth
+                      value={newUserData.username}
+                      onChange={handleNewUserChange}
+                      error={!!newUserErrors.username}
+                      helperText={newUserErrors.username}
+                      required
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel id="role-select-label">Role</InputLabel>
+                    <Select
+                        labelId="role-select-label"
+                        name="role"
+                        value={newUserData.role}
+                        onChange={handleNewUserChange}
+                        label="Role"
+                    >
+                      <MenuItem value="User">User</MenuItem>
+                      <MenuItem value="Administrator">Administrator</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                      name="firstName"
+                      label="First Name"
+                      fullWidth
+                      value={newUserData.firstName}
+                      onChange={handleNewUserChange}
+                      error={!!newUserErrors.firstName}
+                      helperText={newUserErrors.firstName}
+                      required
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                      name="lastName"
+                      label="Last Name"
+                      fullWidth
+                      value={newUserData.lastName}
+                      onChange={handleNewUserChange}
+                      error={!!newUserErrors.lastName}
+                      helperText={newUserErrors.lastName}
+                      required
+                  />
+                </Grid>
+
+                <Grid item xs={12}>
+                  <TextField
+                      name="email"
+                      label="Email Address"
+                      fullWidth
+                      value={newUserData.email}
+                      onChange={handleNewUserChange}
+                      error={!!newUserErrors.email}
+                      helperText={newUserErrors.email}
+                      required
+                  />
+                </Grid>
+
+                <Grid item xs={12}>
+                  <TextField
+                      name="password"
+                      label="Password"
+                      type={newUserPasswordVisible ? 'text' : 'password'}
+                      fullWidth
+                      value={newUserData.password}
+                      onChange={handleNewUserChange}
+                      error={!!newUserErrors.password}
+                      helperText={newUserErrors.password || 'Password must be at least 8 characters long'}
+                      required
+                      InputProps={{
+                        endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                  aria-label="toggle password visibility"
+                                  onClick={toggleNewUserPasswordVisibility}
+                                  edge="end"
+                              >
+                                {newUserPasswordVisible ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                              </IconButton>
+                            </InputAdornment>
+                        ),
+                      }}
+                  />
+                </Grid>
+              </Grid>
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenAddUserDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+                onClick={handleAddUser}
+                variant="contained"
+                color="primary"
+                disabled={loading}
+            >
+              {loading ? <CircularProgress size={24} /> : 'Create User'}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* User Actions Menu */}
+        <Menu
+            id={`user-menu-${selectedUserId}`}
+            anchorEl={userActionsAnchorEl}
+            open={Boolean(userActionsAnchorEl)}
+            onClose={handleCloseUserActionsMenu}
+            anchorOrigin={{
+              vertical: 'bottom',
+              horizontal: 'right',
+            }}
+            transformOrigin={{
+              vertical: 'top',
+              horizontal: 'right',
+            }}
+        >
+          {users.find(u => u.id === selectedUserId)?.status === 'Active' ? (
+              <MenuItem onClick={() => handleUpdateUserStatus(selectedUserId, 'Active')}>
+                <ListItemIcon>
+                  <BlockIcon fontSize="small" />
+                </ListItemIcon>
+                Disable User
+              </MenuItem>
+          ) : (
+              <MenuItem onClick={() => handleUpdateUserStatus(selectedUserId, 'Disabled')}>
+                <ListItemIcon>
+                  <CheckCircleIcon fontSize="small" />
+                </ListItemIcon>
+                Enable User
+              </MenuItem>
+          )}
+
+          <MenuItem onClick={() => {
+            setConfirmDeleteDialog(true);
+            handleCloseUserActionsMenu();
           }}
-          onClick={handleLogout}
-        >
-          LOG OUT
-        </Button>
-      </Paper>
-
-      {/* Profile picture dialog */}
-      <Dialog open={openPictureDialog} onClose={() => setOpenPictureDialog(false)}>
-        <DialogTitle>Update Profile Picture</DialogTitle>
-        <DialogContent>
-          <Typography gutterBottom>
-            Upload a new profile picture. The image should be at least 200x200 pixels.
-          </Typography>
-          <Button
-            variant="contained"
-            component="label"
-            sx={{ mt: 2 }}
           >
-            Select Image
-            <input
-              type="file"
-              hidden
-              accept="image/*"
-            />
-          </Button>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenPictureDialog(false)}>Cancel</Button>
-          <Button onClick={handleUploadPicture} variant="contained" color="primary">Upload</Button>
-        </DialogActions>
-      </Dialog>
+            <ListItemIcon>
+              <DeleteIcon fontSize="small" color="error" />
+            </ListItemIcon>
+            <Typography color="error">Delete User</Typography>
+          </MenuItem>
+        </Menu>
 
-      {/* Add user dialog */}
-      <Dialog 
-        open={openAddUserDialog} 
-        onClose={() => setOpenAddUserDialog(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Add New User</DialogTitle>
-        <DialogContent>
-          <Box component="form" sx={{ mt: 2 }}>
-            <Grid container spacing={2}>
-              <Grid item xs={12}>
-                <TextField
-                  name="username"
-                  label="Username"
-                  fullWidth
-                  value={newUserData.username}
-                  onChange={handleNewUserChange}
-                  error={!!newUserErrors.username}
-                  helperText={newUserErrors.username}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  name="firstName"
-                  label="First Name"
-                  fullWidth
-                  value={newUserData.firstName}
-                  onChange={handleNewUserChange}
-                  error={!!newUserErrors.firstName}
-                  helperText={newUserErrors.firstName}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  name="lastName"
-                  label="Last Name"
-                  fullWidth
-                  value={newUserData.lastName}
-                  onChange={handleNewUserChange}
-                  error={!!newUserErrors.lastName}
-                  helperText={newUserErrors.lastName}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  name="email"
-                  label="Email Address"
-                  fullWidth
-                  value={newUserData.email}
-                  onChange={handleNewUserChange}
-                  error={!!newUserErrors.email}
-                  helperText={newUserErrors.email}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  name="password"
-                  label="Password"
-                  type="password"
-                  fullWidth
-                  value={newUserData.password}
-                  onChange={handleNewUserChange}
-                  error={!!newUserErrors.password}
-                  helperText={newUserErrors.password}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  name="role"
-                  label="Role"
-                  select
-                  fullWidth
-                  value={newUserData.role}
-                  onChange={handleNewUserChange}
-                  SelectProps={{
-                    native: true
-                  }}
-                >
-                  <option value="User">User</option>
-                  <option value="Administrator">Administrator</option>
-                </TextField>
-              </Grid>
-            </Grid>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenAddUserDialog(false)}>Cancel</Button>
-          <Button 
-            onClick={handleAddUser} 
-            variant="contained" 
-            color="primary"
-            disabled={loading}
-          >
-            {loading ? <CircularProgress size={24} /> : 'Create User'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Notification snackbar */}
-      <Snackbar 
-        open={notification.open} 
-        autoHideDuration={5000} 
-        onClose={handleCloseNotification}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert 
-          onClose={handleCloseNotification} 
-          severity={notification.severity} 
-          sx={{ width: '100%' }}
+        {/* Confirm Logout Dialog */}
+        <Dialog
+            open={confirmLogoutDialog}
+            onClose={() => setConfirmLogoutDialog(false)}
+            maxWidth="xs"
+            fullWidth
         >
-          {notification.message}
-        </Alert>
-      </Snackbar>
-    </Box>
+          <DialogTitle>Confirm Logout</DialogTitle>
+          <DialogContent>
+            <Typography>
+              Are you sure you want to log out? Any unsaved changes will be lost.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setConfirmLogoutDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+                onClick={handleLogout}
+                variant="contained"
+                color="primary"
+            >
+              Logout
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Confirm Delete User Dialog */}
+        <Dialog
+            open={confirmDeleteDialog}
+            onClose={() => setConfirmDeleteDialog(false)}
+            maxWidth="xs"
+            fullWidth
+        >
+          <DialogTitle>Confirm User Deletion</DialogTitle>
+          <DialogContent>
+            <Typography color="error" paragraph>
+              Warning: This action cannot be undone.
+            </Typography>
+            <Typography>
+              Are you sure you want to permanently delete this user? All associated data will be removed from the system.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setConfirmDeleteDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+                onClick={handleDeleteUser}
+                variant="contained"
+                color="error"
+                disabled={loading}
+            >
+              {loading ? <CircularProgress size={24} /> : 'Delete User'}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Notification snackbar */}
+        <Snackbar
+            open={notification.open}
+            autoHideDuration={5000}
+            onClose={handleCloseNotification}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        >
+          <Alert
+              onClose={handleCloseNotification}
+              severity={notification.severity}
+              sx={{ width: '100%' }}
+              variant="filled"
+              elevation={6}
+          >
+            {notification.message}
+          </Alert>
+        </Snackbar>
+      </Box>
   );
 };
 
-  export default SystemSettingsPage; 
+export default SystemSettingsPage;
