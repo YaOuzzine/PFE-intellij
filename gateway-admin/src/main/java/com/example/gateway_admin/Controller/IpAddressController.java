@@ -1,3 +1,4 @@
+// src/main/java/com/example/gateway_admin/Controller/IpAddressController.java
 package com.example.gateway_admin.Controller;
 
 import com.example.gateway_admin.Entities.AllowedIps;
@@ -37,7 +38,7 @@ public class IpAddressController {
         this.gatewayRouteRepository = gatewayRouteRepository;
     }
 
-    // GET: All IP addresses with improved detail
+    // GET: All IP addresses with enhanced route details
     @GetMapping
     public List<Map<String, Object>> getAllIpAddresses() {
         List<AllowedIps> ips = allowedIpRepository.findAll();
@@ -48,12 +49,31 @@ public class IpAddressController {
             result.put("ip", ip.getIp());
             result.put("gatewayRouteId", ip.getGatewayRouteId());
 
-            // Add route details if available
+            // Add enhanced route details if available
             if (ip.getGatewayRoute() != null) {
                 result.put("predicate", ip.getGatewayRoute().getPredicates());
                 result.put("routeUri", ip.getGatewayRoute().getUri());
+                result.put("routeId", ip.getGatewayRoute().getRouteId());
+                result.put("withIpFilter", ip.getGatewayRoute().getWithIpFilter());
             }
 
+            return result;
+        }).collect(Collectors.toList());
+    }
+
+    // GET: Retrieve routes for dropdown selection
+    @GetMapping("/routes")
+    public List<Map<String, Object>> getRoutesForSelection() {
+        List<GatewayRoute> routes = gatewayRouteRepository.findAll();
+
+        return routes.stream().map(route -> {
+            Map<String, Object> result = new HashMap<>();
+            result.put("id", route.getId());
+            result.put("predicate", route.getPredicates());
+            result.put("routeId", route.getRouteId());
+            result.put("uri", route.getUri());
+            result.put("withIpFilter", route.getWithIpFilter());
+            result.put("ipCount", route.getAllowedIps() != null ? route.getAllowedIps().size() : 0);
             return result;
         }).collect(Collectors.toList());
     }
@@ -98,6 +118,12 @@ public class IpAddressController {
                 return ResponseEntity.badRequest().body("This IP is already assigned to this route");
             }
 
+            // Set withIpFilter to true if it's adding an IP
+            if (!Boolean.TRUE.equals(route.getWithIpFilter())) {
+                route.setWithIpFilter(true);
+                gatewayRouteRepository.save(route);
+            }
+
             // Associate the new IP address with the fetched GatewayRoute
             ipAddress.setGatewayRoute(route);
 
@@ -111,7 +137,15 @@ public class IpAddressController {
             // Trigger manual sync for immediate effect
             dataSyncService.syncRoutesToGatewaySchema();
 
-            return ResponseEntity.ok(savedIp);
+            Map<String, Object> response = new HashMap<>();
+            response.put("id", savedIp.getId());
+            response.put("ip", savedIp.getIp());
+            response.put("gatewayRouteId", savedIp.getGatewayRouteId());
+            response.put("predicate", route.getPredicates());
+            response.put("routeUri", route.getUri());
+            response.put("routeId", route.getRouteId());
+
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -126,6 +160,11 @@ public class IpAddressController {
         try {
             AllowedIps existingIp = allowedIpRepository.findById(id)
                     .orElseThrow(() -> new RuntimeException("Allowed IP not found with id " + id));
+
+            // Validate the new IP
+            if (!isValidIpAddress(updatedIp.getIp())) {
+                return ResponseEntity.badRequest().body("Invalid IP address format");
+            }
 
             // Update IP address
             existingIp.setIp(updatedIp.getIp());
@@ -150,7 +189,14 @@ public class IpAddressController {
             // Trigger manual sync
             dataSyncService.syncRoutesToGatewaySchema();
 
-            return ResponseEntity.ok(savedIp);
+            Map<String, Object> response = new HashMap<>();
+            response.put("id", savedIp.getId());
+            response.put("ip", savedIp.getIp());
+            response.put("gatewayRouteId", savedIp.getGatewayRouteId());
+            response.put("predicate", savedIp.getGatewayRoute().getPredicates());
+            response.put("routeUri", savedIp.getGatewayRoute().getUri());
+
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -165,12 +211,20 @@ public class IpAddressController {
         try {
             AllowedIps ipToDelete = allowedIpRepository.findById(ipId)
                     .orElseThrow(() -> new RuntimeException("Allowed IP not found with id " + ipId));
+
             if (!ipToDelete.getGatewayRoute().getId().equals(gatewayId)) {
                 throw new RuntimeException("IP address with id " + ipId +
                         " does not belong to gateway route with id " + gatewayId);
             }
+
             GatewayRoute route = ipToDelete.getGatewayRoute();
             route.getAllowedIps().remove(ipToDelete);
+
+            // If this was the last IP, disable IP filtering on the route
+            if (route.getAllowedIps().isEmpty()) {
+                route.setWithIpFilter(false);
+            }
+
             gatewayRouteRepository.save(route);
             allowedIpRepository.delete(ipToDelete);
 
@@ -185,59 +239,29 @@ public class IpAddressController {
         }
     }
 
-    // Debugging endpoint
-    @GetMapping("/debug")
-    public Map<String, Object> debugIpAddresses() {
-        Map<String, Object> debug = new HashMap<>();
-
-        // Get all routes
-        List<GatewayRoute> routes = gatewayRouteRepository.findAll();
-        debug.put("routeCount", routes.size());
-
-        // Count IPs
-        List<AllowedIps> ips = allowedIpRepository.findAll();
-        debug.put("ipCount", ips.size());
-
-        // Get IP-route associations
-        Map<Long, List<String>> ipsByRoute = new HashMap<>();
-        for (GatewayRoute route : routes) {
-            ipsByRoute.put(route.getId(),
-                    route.getAllowedIps().stream()
-                            .map(AllowedIps::getIp)
-                            .collect(Collectors.toList()));
-        }
-        debug.put("ipsByRoute", ipsByRoute);
-
-        return debug;
-    }
-
-    // Fix database sequences
-    @PostMapping("/reset-sequences")
-    public ResponseEntity<String> resetSequences() {
+    // DELETE: Remove all IPs for a route
+    @DeleteMapping("/route/{routeId}")
+    @Transactional
+    public ResponseEntity<?> deleteAllIpsForRoute(@PathVariable Long routeId) {
         try {
-            // Execute native SQL to reset sequences
-            entityManager.createNativeQuery(
-                    "SELECT setval('admin.allowed_ips_id_seq', (SELECT MAX(id) FROM admin.allowed_ips));"
-            ).executeUpdate();
+            GatewayRoute route = gatewayRouteRepository.findById(routeId)
+                    .orElseThrow(() -> new RuntimeException("Gateway route not found with id " + routeId));
 
-            return ResponseEntity.ok("Sequences reset successfully");
+            if (route.getAllowedIps() != null && !route.getAllowedIps().isEmpty()) {
+                allowedIpRepository.deleteAll(route.getAllowedIps());
+                route.getAllowedIps().clear();
+                route.setWithIpFilter(false);
+                gatewayRouteRepository.save(route);
+
+                // Trigger manual sync
+                dataSyncService.syncRoutesToGatewaySchema();
+            }
+
+            return ResponseEntity.ok().build();
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Failed to reset sequences: " + e.getMessage());
-        }
-    }
-
-    // Trigger manual sync
-    @PostMapping("/trigger-sync")
-    public ResponseEntity<String> triggerSync() {
-        try {
-            dataSyncService.syncRoutesToGatewaySchema();
-            return ResponseEntity.ok("Manual synchronization triggered successfully");
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Failed to trigger synchronization: " + e.getMessage());
+                    .body("Failed to delete IP addresses: " + e.getMessage());
         }
     }
 
